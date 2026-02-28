@@ -1,27 +1,77 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import google.generativeai as genai
 import os
+from dotenv import load_dotenv
+import speech_recognition as sr
+import pyttsx3
 
-# ------------------ CONFIG ------------------ #
+# ------------------ SETUP ------------------ #
 
-st.set_page_config(page_title="Voice AI Assistant", layout="centered")
-
-# IMPORTANT: For Streamlit Cloud use st.secrets
-api_key = st.secrets.get("GEMINI_API_KEY", None)
-
-if not api_key:
-    st.error("API Key not found. Add GEMINI_API_KEY in Streamlit Secrets.")
-    st.stop()
-
-genai.configure(api_key=api_key)
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
-# ------------------ UI HEADER ------------------ #
+# ------------------ VOICE FUNCTIONS ------------------ #
 
-st.title("🎤 AI Voice Assistant")
-st.markdown("Powered by Gemini 2.5 Flash-Lite")
+def speak(text):
+    import pyttsx3
+    engine = pyttsx3.init()
+    engine.say(text)
+    engine.runAndWait()
+    engine.stop()
+
+def listen():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        st.toast("🎤 Listening...")
+        audio = recognizer.listen(source)
+        try:
+            text = recognizer.recognize_google(audio)
+            return text
+        except:
+            return "Sorry, I could not understand."
+
+# ------------------ PAGE CONFIG ------------------ #
+
+st.set_page_config(page_title="Voice AI Agent", layout="centered")
+
+# ------------------ CUSTOM CSS ------------------ #
+
+st.markdown("""
+<style>
+body {
+    background: linear-gradient(to right, #141E30, #243B55);
+    color: white;
+}
+.big-title {
+    text-align: center;
+    font-size: 40px;
+    font-weight: bold;
+    color: #00f5ff;
+}
+.subtitle {
+    text-align: center;
+    font-size: 18px;
+    color: #bbbbbb;
+}
+.stButton>button {
+    background: linear-gradient(90deg, #00f5ff, #ff00c8);
+    color: white;
+    font-size: 18px;
+    border-radius: 12px;
+    height: 50px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ------------------ HERO IMAGE ------------------ #
+
+st.image("voice_banner.jpg", use_container_width=True)
+
+st.markdown('<div class="big-title">🎤 AI Voice Assistant</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Powered by Gemini 2.5 Flash-Lite</div>', unsafe_allow_html=True)
+
 st.divider()
 
 # ------------------ SESSION MEMORY ------------------ #
@@ -29,56 +79,19 @@ st.divider()
 if "chat" not in st.session_state:
     st.session_state.chat = model.start_chat(history=[])
 
-if "voice_text" not in st.session_state:
-    st.session_state.voice_text = ""
+# ------------------ VOICE BUTTON ------------------ #
 
-# ------------------ VOICE COMPONENT ------------------ #
+if st.button("🎙️ Start Speaking"):
 
-voice_component = components.html(
-    """
-    <div style="text-align:center;">
-        <button onclick="startRecognition()" 
-        style="padding:12px 24px; font-size:18px; 
-        background:linear-gradient(90deg,#00f5ff,#ff00c8); 
-        color:white; border:none; border-radius:12px; cursor:pointer;">
-        🎙️ Click to Speak
-        </button>
-    </div>
+    user_input = listen()
 
-    <script>
-    var recognition = new webkitSpeechRecognition();
-    recognition.continuous = false;
-    recognition.lang = 'en-US';
+    st.chat_message("user").write(user_input)
 
-    recognition.onresult = function(event) {
-        const transcript = event.results[0][0].transcript;
-        window.parent.postMessage(
-            { type: "streamlit:setComponentValue", value: transcript },
-            "*"
-        );
-    };
+    response = st.session_state.chat.send_message(user_input)
 
-    function startRecognition() {
-        recognition.start();
-    }
-    </script>
-    """,
-    height=120,
-)
+    st.chat_message("assistant").write(response.text)
 
-# ------------------ PROCESS INPUT ------------------ #
-
-if voice_component and isinstance(voice_component, str):
-    user_text = voice_component.strip()
-
-    if user_text != "":
-        st.chat_message("user").write(user_text)
-
-        try:
-            response = st.session_state.chat.send_message(user_text)
-            st.chat_message("assistant").write(response.text)
-        except Exception as e:
-            st.error("Error generating response")
+    speak(response.text)
 
 st.divider()
-st.caption("⚡ Voice-enabled chatbot built with Streamlit + Gemini API")
+st.caption("⚡ Built using Streamlit + Gemini LLM | Session-based conversational memory")
